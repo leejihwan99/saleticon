@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>이모티콘 매출 현황</title>
 <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root{
   --bg:#0b0b0f;
@@ -250,7 +250,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--font);min-height:100
 /* ═══════════════════════════════════════
    GLOBALS
 ═══════════════════════════════════════ */
-const SHEET_ID = '1w7wSkqzkDXZb1IBaHokcnsRt8zbZ6_dwu-e3yaimuUI';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx3Y7NOYNA9mwDjurA7zR-9Ro7xRhs1vB9kL4WDufUHqz-DsfcTBH2JBD1Li2hww9_EXg/exec';
 const MO       = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
 
 let emotiList = [];   // [{id, name, thumb, imgs[10], royalImg}]
@@ -269,26 +269,13 @@ document.addEventListener('DOMContentLoaded', loadAll);
 /* ═══════════════════════════════════════
    FETCH
 ═══════════════════════════════════════ */
-const PROXIES = [
-  url => `https://corsproxy.io/?${url}`,
-  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-];
-
 async function fetchSheet(name) {
-  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}&_=${Date.now()}`;
-
-  for (const makeProxy of PROXIES) {
-    try {
-      const res = await fetch(makeProxy(url), { cache: 'no-store' });
-      if (!res.ok) continue;
-      const text = await res.text();
-      if (text.startsWith('<!') || text.trim() === '') continue;
-      return csvToObjects(text);
-    } catch {
-      // 다음 프록시 시도
-    }
-  }
-  throw new Error(`"${name}" 시트를 불러오지 못했습니다. 잠시 후 새로고침해주세요.`);
+  const url = `${APPS_SCRIPT_URL}?sheet=${encodeURIComponent(name)}&_=${Date.now()}`;
+  const res  = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`"${name}" 시트를 불러오지 못했습니다 (HTTP ${res.status})`);
+  const text = await res.text();
+  if (text.startsWith('<!')) throw new Error(`"${name}" 시트를 찾을 수 없거나 공개 설정을 확인해주세요`);
+  return csvToObjects(text);
 }
 
 /* ═══════════════════════════════════════
@@ -522,14 +509,72 @@ function renderStats() {
   document.getElementById('sv4').textContent = emotiList.length + '종';
 }
 
+/* ── 한 번에 렌더할 카드 수 (초기 + 추가 배치) ── */
+const BATCH = 10;
+let _renderSorted  = [];   // 현재 정렬된 전체 목록
+let _renderOffset  = 0;    // 다음에 렌더할 인덱스
+let _renderObs     = null; // IntersectionObserver
+
 function renderList() {
+  const el = document.getElementById('elist');
+
+  // 기존 Observer 정리
+  if (_renderObs) { _renderObs.disconnect(); _renderObs = null; }
+
   if (!emotiList.length) {
-    document.getElementById('elist').innerHTML = '<div class="sbox">이모티콘 목록이 없습니다</div>';
+    el.innerHTML = '<div class="sbox">이모티콘 목록이 없습니다</div>';
     return;
   }
-  const sorted = [...emotiList].sort((a,b) => Number(b.id) - Number(a.id));
-  const maxId  = sorted[0]?.id;
-  document.getElementById('elist').innerHTML = sorted.map(e => buildCard(e, e.id === maxId)).join('');
+
+  _renderSorted = [...emotiList].sort((a, b) => Number(b.id) - Number(a.id));
+  _renderOffset = 0;
+  el.innerHTML  = '';          // 기존 내용 초기화
+
+  _appendBatch();              // 첫 배치 즉시 렌더
+
+  // 마지막 카드가 뷰포트에 들어오면 다음 배치 추가 (무한 스크롤)
+  _renderObs = new IntersectionObserver(entries => {
+    if (entries[0].isIntersecting) _appendBatch();
+  }, { rootMargin: '200px' });
+
+  _observeSentinel();
+}
+
+function _appendBatch() {
+  if (_renderOffset >= _renderSorted.length) {
+    if (_renderObs) { _renderObs.disconnect(); _renderObs = null; }
+    // 센티넬 제거
+    document.getElementById('_sentinel')?.remove();
+    return;
+  }
+
+  const el       = document.getElementById('elist');
+  const maxId    = _renderSorted[0]?.id;
+  const frag     = document.createDocumentFragment();
+  const end      = Math.min(_renderOffset + BATCH, _renderSorted.length);
+
+  // 센티넬 제거 후 카드 추가
+  document.getElementById('_sentinel')?.remove();
+
+  for (let i = _renderOffset; i < end; i++) {
+    const e   = _renderSorted[i];
+    const div = document.createElement('div');
+    div.innerHTML = buildCard(e, e.id === maxId);
+    frag.appendChild(div.firstElementChild);
+  }
+  _renderOffset = end;
+
+  el.appendChild(frag);
+  _observeSentinel();
+}
+
+function _observeSentinel() {
+  if (_renderOffset >= _renderSorted.length) return;
+  const el  = document.getElementById('elist');
+  const sen = document.createElement('div');
+  sen.id    = '_sentinel';
+  el.appendChild(sen);
+  if (_renderObs) _renderObs.observe(sen);
 }
 
 /* ═══════════════════════════════════════
