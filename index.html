@@ -61,7 +61,10 @@ body{background:var(--bg);color:var(--tx);font-family:var(--font);min-height:100
 .stat{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:16px 18px}
 .slbl{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--sub);margin-bottom:6px}
 .sval{font-size:20px;font-weight:800;letter-spacing:-0.5px;word-break:keep-all}
-.cp{color:var(--p)}.cp2{color:var(--p2)}.cp3{color:var(--p3)}.cp4{color:var(--p4)}
+.cp{color:var(--p)}
+.cp2{color:#818cf8}
+.cp3{color:#a78bfa}
+.cp4{color:var(--p3)}
 
 /* ── Overview chart card ── */
 .cc{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:20px;margin-bottom:8px}
@@ -103,11 +106,14 @@ body{background:var(--bg);color:var(--tx);font-family:var(--font);min-height:100
 .esub{font-size:11px;color:var(--sub)}
 
 /* right */
-.eright{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;padding:12px 14px 12px 0;gap:2px;flex-shrink:0}
+.eright{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;padding:12px 14px 12px 0;gap:1px;flex-shrink:0}
+.epkl{font-size:10px;font-weight:700;letter-spacing:.5px;color:var(--sub);margin-bottom:2px}
 .epkv{font-size:16px;font-weight:800;color:var(--p);letter-spacing:-0.5px;white-space:nowrap}
-.epkm{font-size:10px;color:var(--sub)}
 .chev{color:var(--dim);font-size:11px;margin-top:6px;transition:transform .3s}
 .ecard.open .chev{transform:rotate(180deg);color:var(--p)}
+.eroi{font-size:15px;font-weight:800;letter-spacing:-0.3px;white-space:nowrap;margin-top:3px}
+.eroi.pos{color:var(--p3)}
+.eroi.neg{color:var(--p4)}
 
 /* ── Detail panel ── */
 .edetail{display:none;border-top:1px solid var(--bd);background:var(--s2)}
@@ -228,7 +234,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--font);min-height:100
         <div class="stat"><div class="slbl">총 판매액</div><div class="sval cp" id="sv1">—</div></div>
         <div class="stat"><div class="slbl">이모티콘 판매액</div><div class="sval cp2" id="sv2">—</div></div>
         <div class="stat"><div class="slbl">로얄티콘 판매액</div><div class="sval cp3" id="sv3">—</div></div>
-        <div class="stat"><div class="slbl">등록 이모티콘</div><div class="sval cp4" id="sv4">—</div></div>
+        <div class="stat"><div class="slbl">이모티콘 수익률</div><div class="sval cp4" id="sv4">—</div></div>
       </div>
       <div class="cc">
         <div class="cc-top"><h3 id="ovTitle">전체 월별 판매량</h3></div>
@@ -238,7 +244,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--font);min-height:100
     </div>
 
     <div class="sec" style="padding-top:24px">
-      <div class="sec-hd">이모티콘별 매출</div>
+      <div class="sec-hd" id="secEmoHd">이모티콘별 매출</div>
       <div class="elist" id="elist">
         <div class="sbox"><div class="spin"></div>데이터 집계 중…</div>
       </div>
@@ -341,6 +347,7 @@ async function loadAll() {
       thumb:    r['THUMB_URL']  || '',
       imgs:     Array.from({length:10}, (_, i) => r[`IMAGE_URL_${String(i+1).padStart(2,'0')}`] || ''),
       royalImg: r['ROYAL_IMAGE_URL'] || '',
+      cost:     parseInt(r['cost'] || '0') || 0,
     })).filter(r => r.id);
 
     emoLogs = emoRows.map(r => {
@@ -506,7 +513,29 @@ function renderStats() {
   document.getElementById('sv1').textContent = fmtWon(emoWon + royWon);
   document.getElementById('sv2').textContent = fmtWon(emoWon);
   document.getElementById('sv3').textContent = fmtWon(royWon);
-  document.getElementById('sv4').textContent = emotiList.length + '종';
+
+  // 이모티콘 수익률: 매출 > 0인 이모티콘만 포함
+  const activeEmos = emotiList.filter(e => {
+    const eRev = emoLogs
+      .filter(r => String(r.id)===String(e.id) && String(r.year)===selYear)
+      .reduce((s,r) => s + (r.coin||30)*100, 0);
+    const rRev = royLogs
+      .filter(r => String(r.setId)===String(e.id) && String(r.year)===selYear)
+      .reduce((s,r) => s + (r.qty30*30 + r.qty50*50 + r.qty100*100)*100, 0);
+    return (eRev + rRev) > 0;
+  });
+  const activeCost = activeEmos.reduce((s, e) => s + e.cost, 0);
+  const activeRevenue = emoWon + royWon; // 매출 있는 것들만 걸러도 총합은 동일
+  if (activeCost > 0) {
+    const roi = ((activeRevenue - activeCost) / activeCost * 100).toFixed(1);
+    const sign = Number(roi) >= 0 ? '+' : '';
+    document.getElementById('sv4').textContent = sign + roi + '%';
+  } else {
+    document.getElementById('sv4').textContent = '—';
+  }
+
+  // 섹션 헤더에 등록 수 표시
+  document.getElementById('secEmoHd').textContent = `이모티콘별 매출 (등록: ${emotiList.length}종)`;
 }
 
 /* ── 한 번에 렌더할 카드 수 (초기 + 추가 배치) ── */
@@ -593,6 +622,14 @@ function buildCard(e, isNew) {
     .filter(r => String(r.setId)===String(e.id) && String(r.year)===selYear)
     .reduce((s,r) => s + (r.qty30*30 + r.qty50*50 + r.qty100*100)*100, 0);
 
+  const totalRevenue = emoWon + royWon;
+  let roiHtml = '';
+  if (e.cost > 0 && totalRevenue > 0) {
+    const roi = ((totalRevenue - e.cost) / e.cost * 100).toFixed(1);
+    const cls = Number(roi) >= 0 ? 'pos' : 'neg';
+    roiHtml = `<div class="eroi ${cls}">${Number(roi) >= 0 ? '+' : ''}${roi}%</div>`;
+  }
+
   const newBadge = isNew
     ? `<span style="display:inline-block;font-size:9px;font-weight:800;letter-spacing:1px;
          background:var(--p3);color:#0b0b0f;padding:2px 7px;border-radius:4px;
@@ -617,8 +654,9 @@ function buildCard(e, isNew) {
         <div class="esub">이모티콘 ${fmt(eTot)}건 · 로얄티콘 ${fmt(rTot)}건</div>
       </div>
       <div class="eright">
+        <div class="epkl">매출 현황</div>
         <div class="epkv">${fmtWon(emoWon + royWon)}</div>
-        <div class="epkm">총 매출액</div>
+        ${roiHtml}
         <div class="chev">▼</div>
       </div>
     </div>
