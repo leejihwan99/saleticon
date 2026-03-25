@@ -222,6 +222,9 @@ body{background:var(--bg);color:var(--tx);font-family:var(--font);min-height:100
     <div class="hdr-r">
       <div class="ldot" id="ldot"></div>
       <span class="ltxt" id="ltxt">로딩 중…</span>
+      <button class="bxs" onclick="openSheet()" id="sheetBtn" style="display:none">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>시트 열기
+      </button>
       <button class="bxs" onclick="reloadAll()">↻ 새로고침</button>
     </div>
   </header>
@@ -257,6 +260,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--font);min-height:100
    GLOBALS
 ═══════════════════════════════════════ */
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx3Y7NOYNA9mwDjurA7zR-9Ro7xRhs1vB9kL4WDufUHqz-DsfcTBH2JBD1Li2hww9_EXg/exec';
+const SHEET_URL       = 'https://docs.google.com/spreadsheets/d/1-2MT65UQcofqk1VeePX73__JlVg3V1Hw8Q4ADkviA_Y/edit?usp=sharing';
 const MO       = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
 
 let emotiList = [];   // [{id, name, thumb, imgs[10], royalImg}]
@@ -940,9 +944,13 @@ function esc(s)    {
     .replace(/&/g,'&amp;').replace(/</g,'&lt;')
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+function openSheet() {
+  if (SHEET_URL) window.open(SHEET_URL, '_blank');
+}
 function setLive(on, txt) {
   document.getElementById('ldot').className = 'ldot' + (on ? ' on' : '');
   document.getElementById('ltxt').textContent = txt;
+  document.getElementById('sheetBtn').style.display = SHEET_URL ? '' : 'none';
 }
 </script>
 </body>
